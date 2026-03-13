@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -18,6 +20,11 @@ import (
 
 	"github.com/google/uuid"
 )
+
+//go:embed index.html
+var indexHTMLSrc string
+
+var indexTmpl *template.Template
 
 const maxBodyBytes = 65536 // 64 KB
 
@@ -83,6 +90,8 @@ func main() {
 		log.Fatal("TOKEN env var is required")
 	}
 
+	indexTmpl = template.Must(template.New("index").Parse(indexHTMLSrc))
+
 	// ensure the log file exists
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		if f, err := os.Create(logFile); err != nil {
@@ -98,10 +107,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", handleGet)
-	mux.HandleFunc("POST /", handlePost)
-	mux.HandleFunc("PATCH /", handlePatch)
-	mux.HandleFunc("DELETE /", handleDelete)
+	mux.HandleFunc("GET /api/", handleGet)
+	mux.HandleFunc("POST /api/", handlePost)
+	mux.HandleFunc("PATCH /api/", handlePatch)
+	mux.HandleFunc("DELETE /api/", handleDelete)
 
 	log.Printf("listening on :%s, log=%s", port, logFile)
 	handler := loggingMiddleware(jsonMiddleware(mux))
@@ -153,7 +162,29 @@ func checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// ---------- GET ----------
+// ---------- index ----------
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	entries, err := readLocations(200)
+	mu.Unlock()
+
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	locJSON, err := json.Marshal(entries)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	indexTmpl.Execute(w, template.JS(locJSON))
+}
+
+// ---------- GET /api/ ----------
 
 func handleGet(w http.ResponseWriter, r *http.Request) {
 	// unauthenticated ping
@@ -186,16 +217,31 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mu.Lock()
-	defer mu.Unlock()
+	entries, err := readLocations(limit)
+	mu.Unlock()
 
-	f, err := os.Open(logFile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "log_not_readable")
 		return
 	}
+
+	if len(entries) == 0 {
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "no_location_found"})
+		return
+	}
+
+	json.NewEncoder(w).Encode(entries)
+}
+
+// readLocations reads up to limit upload entries from the end of the log file.
+// Must be called with mu held.
+func readLocations(limit int) ([]Entry, error) {
+	f, err := os.Open(logFile)
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
 
-	// read all lines, collect upload entries from the end
 	var lines []string
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
@@ -230,12 +276,7 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, entry)
 	}
 
-	if len(entries) == 0 {
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "no_location_found"})
-		return
-	}
-
-	json.NewEncoder(w).Encode(entries)
+	return entries, nil
 }
 
 // ---------- POST ----------

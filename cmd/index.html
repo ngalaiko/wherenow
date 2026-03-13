@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Where Now?</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; }
+    #map { width: 100vw; height: 100vh; }
+
+    #count {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 1000;
+      background: rgba(20, 20, 30, 0.82);
+      backdrop-filter: blur(6px);
+      color: rgba(255,255,255,0.5);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="count"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script>
+    const LOCATIONS = {{.}};
+
+    const map = L.map('map', { zoomControl: true }).setView([30, 10], 2);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    if (LOCATIONS && LOCATIONS.length > 0) {
+      const points = LOCATIONS.map(e => [e.lat, e.lon, 1]);
+
+      L.heatLayer(points, {
+        radius: 22,
+        blur: 18,
+        maxZoom: 10,
+        gradient: { 0.2: '#0ea5e9', 0.5: '#a855f7', 0.8: '#f97316', 1.0: '#fbbf24' }
+      }).addTo(map);
+
+      map.fitBounds(L.latLngBounds(points.map(p => [p[0], p[1]])));
+
+      document.getElementById('count').textContent =
+        LOCATIONS.length + ' location' + (LOCATIONS.length === 1 ? '' : 's');
+    }
+  </script>
+</body>
+</html>
