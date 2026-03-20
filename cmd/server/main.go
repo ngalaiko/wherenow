@@ -107,6 +107,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", handleIndex)
 	mux.HandleFunc("GET /api/", handleGet)
 	mux.HandleFunc("POST /api/", handlePost)
 	mux.HandleFunc("PATCH /api/", handlePatch)
@@ -165,6 +166,13 @@ func checkAuth(w http.ResponseWriter, r *http.Request) bool {
 // ---------- index ----------
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
+	_, pass, ok := r.BasicAuth()
+	if !ok || subtle.ConstantTimeCompare([]byte(token), []byte(pass)) != 1 {
+		w.Header().Set("WWW-Authenticate", `Basic realm="wherenow"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	mu.Lock()
 	entries, err := readLocations(200)
 	mu.Unlock()

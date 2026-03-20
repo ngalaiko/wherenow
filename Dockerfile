@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
-RUN go build -o /tmp/wherenow ./cmd
+RUN go build -o /tmp/wherenow ./cmd/server
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
